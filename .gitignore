@@ -1,0 +1,32 @@
+﻿# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.class
+*.pytest_cache/
+
+# Entornos virtuales
+.venv/
+venv/
+ENV/
+env/
+
+# Datasets y logs de entrenamiento masivos
+*.jsonl
+*.csv.gz
+*.pgn.gz
+*.log
+debug_chess.txt
+evaluate_output.txt
+
+# Binarios de terceros no redistribuibles
+stockfish.exe
+stockfish
+
+# IDEs
+.vscode/
+.idea/
+.DS_Store
+
+# Archivos temporales de scratch
+scratch_*
+*.tmp

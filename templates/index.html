@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Motor de Ajedrez Humano - Interfaz Gráfica</title>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=1.1.2">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar Izquierdo: Controles de Juego y Configuración -->
+        <aside class="sidebar left-sidebar">
+            <div class="brand">
+                <div class="logo-icon">♟</div>
+                <h1>Motor <span>Ajedrez</span></h1>
+            </div>
+
+            <div class="panel-card">
+                <h2>Estado de Partida</h2>
+                <div id="game-status" class="status-badge status-active">
+                    <span id="status-message">Esperando inicio...</span>
+                </div>
+                <div id="turn-indicator" class="turn-badge white-turn">
+                    <span class="badge-icon">⚪</span>
+                    <span>Turno: <strong id="turn-text">Blancas</strong></span>
+                </div>
+            </div>
+
+            <div class="panel-card">
+                <h2>Configuración</h2>
+                <div class="option-group">
+                    <label for="game-mode-select">Modo de juego:</label>
+                    <select id="game-mode-select" class="custom-select">
+                        <option value="pvp">👥 Humano vs Humano</option>
+                        <option value="pve" selected>💻 Humano vs Motor (IA)</option>
+                    </select>
+                </div>
+
+                <div class="option-group">
+                    <label for="color-select">Jugar como:</label>
+                    <select id="color-select" class="custom-select">
+                        <option value="white" selected>⚪ Blancas</option>
+                        <option value="black">⚫ Negras</option>
+                    </select>
+                </div>
+
+                <div class="option-group">
+                    <label for="board-size-select">Tamaño del Tablero:</label>
+                    <select id="board-size-select" class="custom-select">
+                        <option value="small">🔎 Pequeño (480px)</option>
+                        <option value="medium">📐 Mediano (600px)</option>
+                        <option value="large" selected>🖥️ Grande (700px - Recomendado)</option>
+                        <option value="huge">📺 Gigante (820px)</option>
+                        <option value="auto">⚡ Ajuste Automático</option>
+                    </select>
+                </div>
+
+                <div class="option-group">
+                    <label for="theme-select">Diseño de Piezas:</label>
+                    <select id="theme-select" class="custom-select">
+                        <option value="lichess" selected>♟ Lichess Oficial (cburnett SVG)</option>
+                        <option value="staunton">♟ Staunton SVG Clásico</option>
+                        <option value="unicode">🆎 Símbolos Unicode</option>
+                        <option value="gemini_svg">✨ Gemini 3D SVG</option>
+                        <option value="custom_adobe">🎨 Arte Personalizado (Especial Adobe)</option>
+                        <option value="custom_madera">🪵 Arte Madera 3D (Gemini Madera)</option>
+                        <option value="custom_madera2d">🪵 Arte Madera 2D (Gemini Madera 2D)</option>
+                        <option value="custom_cool">😎 Arte Cool (Gemini Cool HD)</option>
+                    </select>
+                </div>
+
+                <div class="button-group">
+                    <button id="btn-new-game" class="btn btn-primary">🔄 Nueva Partida</button>
+                    <button id="btn-flip-board" class="btn btn-secondary">🔃 Girar Tablero</button>
+                </div>
+            </div>
+
+            <div class="panel-card history-card">
+                <div class="card-header-row">
+                    <h2>Historial de Movimientos</h2>
+                </div>
+                <div id="move-history" class="history-list">
+                    <div class="history-empty">No hay movimientos aún</div>
+                </div>
+                <div class="history-actions history-actions-bottom"
+                    style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;">
+                    <button id="btn-paste-pgn" class="btn btn-secondary btn-xs"
+                        title="Pegar historial de jugadas o PGN desde el portapapeles">📥 Pegar</button>
+                    <button id="btn-copy-pgn" class="btn btn-secondary btn-xs" title="Copiar historial completo PGN">📋
+                        Copiar PGN</button>
+                    <button id="btn-copy-fen" class="btn btn-secondary btn-xs"
+                        title="Copiar código FEN de la posición actual">♟ Copiar FEN</button>
+                    <button id="btn-copy-explanations" class="btn btn-primary btn-xs"
+                        style="width: 100%; margin-top: 4px; font-weight: 600;"
+                        title="Copiar historial completo con explicaciones detalladas del motor">💬 Copiar con
+                        Explicaciones</button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Área Principal del Tablero (Centro - Centrado Vertical) -->
+        <main class="board-container">
+            <div class="board-wrapper">
+                <div id="files-top" class="board-labels files-labels"></div>
+
+                <div class="board-center">
+                    <!-- Barra de Evaluación Vertical -->
+                    <div id="eval-bar-wrapper" class="eval-bar-wrapper" title="Barra de Evaluación de la Posición">
+                        <div id="eval-bar" class="eval-bar">
+                            <div id="eval-bar-black" class="eval-fill eval-fill-black"></div>
+                            <div id="eval-bar-white" class="eval-fill eval-fill-white"></div>
+                        </div>
+                        <span id="eval-score-text" class="eval-score-text">0.0</span>
+                    </div>
+
+                    <div id="ranks-left" class="board-labels ranks-labels"></div>
+                    <div id="chessboard" class="chessboard"></div>
+                    <div id="ranks-right" class="board-labels ranks-labels"></div>
+                </div>
+
+                <div id="files-bottom" class="board-labels files-labels"></div>
+
+                <!-- Barra de Navegación de Historial (Deshacer/Rehacer < >) -->
+                <div class="history-nav-bar">
+                    <button id="btn-nav-first" class="btn btn-secondary btn-nav"
+                        title="Ir a la posición inicial (Inicio)">⏮</button>
+                    <button id="btn-nav-prev" class="btn btn-secondary btn-nav" title="Retroceder jugada (<)">◀</button>
+                    <span id="nav-step-indicator" class="nav-step-text">Posición actual</span>
+                    <button id="btn-nav-next" class="btn btn-secondary btn-nav" title="Avanzar jugada (>)">▶</button>
+                    <button id="btn-nav-last" class="btn btn-secondary btn-nav"
+                        title="Ir a la última jugada (Final)">⏭</button>
+                </div>
+            </div>
+
+            <!-- Panel de Entrenamiento / Consejos para Superar el Nivel de Elo -->
+            <div id="elo-coaching-banner" class="elo-coaching-banner" style="display: none;"></div>
+        </main>
+
+        <!-- Sidebar de Análisis del Motor (Derecha) -->
+        <aside class="sidebar analysis-sidebar">
+            <div class="brand">
+                <div class="logo-icon">🔍</div>
+                <h1>Módulo de <span>Análisis</span></h1>
+            </div>
+
+            <div class="panel-card analysis-settings-card">
+                <h2>Ajustes del Motor</h2>
+                
+                <div class="option-group" style="background: rgba(52, 152, 219, 0.08); padding: 10px; border-radius: 8px; border: 1px solid rgba(52, 152, 219, 0.3); margin-bottom: 12px;">
+                    <label for="elo-level-select" style="font-weight: 700; color: #60a5fa; display: flex; justify-content: space-between; align-items: center;">
+                        <span>🏆 Nivel de Elo (Motor):</span>
+                        <span id="elo-badge-count" class="badge" style="background: #2563eb; color: #fff; font-size: 10px; padding: 2px 6px; border-radius: 4px;">55/55</span>
+                    </label>
+                    <select id="elo-level-select" class="custom-select" style="font-weight: 600; margin-top: 4px;">
+                        <option value="MAX" selected>🏆 MAX - Todas las 55 Heurísticas (Maestro 2500+)</option>
+                        <option value="2200">🥇 Elo 2200 - Maestro Nacional (44 técnicas)</option>
+                        <option value="2100">🥇 Elo 2100 - Candidato a Maestro (44 técnicas)</option>
+                        <option value="2000">🎖️ Elo 2000 - Nivel Experto (44 técnicas)</option>
+                        <option value="1900">🎖️ Elo 1900 - Avanzado Fuerte (44 técnicas)</option>
+                        <option value="1800">🎖️ Elo 1800 - Avanzado (44 técnicas)</option>
+                        <option value="1700">🥈 Elo 1700 - Intermedio Alto (44 técnicas)</option>
+                        <option value="1600">🥈 Elo 1600 - Intermedio (44 técnicas)</option>
+                        <option value="1500">🥈 Elo 1500 - Intermedio Inicial (43 técnicas)</option>
+                        <option value="1400">🥉 Elo 1400 - Club / Aficionado (37 técnicas)</option>
+                        <option value="1300">🥉 Elo 1300 - Aficionado (37 técnicas)</option>
+                        <option value="1200">🥉 Elo 1200 - Iniciación Club (37 técnicas)</option>
+                        <option value="1100">🔰 Elo 1100 - Principiante Alto (37 técnicas)</option>
+                        <option value="1000">🔰 Elo 1000 - Principiante Medio (37 técnicas)</option>
+                        <option value="900">🐣 Elo 900 - Principiante Básico (36 técnicas)</option>
+                        <option value="800">🐣 Elo 800 - Principiante Inicial (35 técnicas)</option>
+                    </select>
+                    <div id="elo-badge-info" style="font-size: 11px; margin-top: 4px; color: #93c5fd; font-weight: 500;">
+                        ✨ Perfil MAX: 55/55 técnicas activas | Depth sugerido: 6
+                    </div>
+                </div>
+
+                <div class="option-group">
+                    <label for="engine-version">Versión del Motor:</label>
+                    <select id="engine-version" class="custom-select">
+                        <option value="engine_t_total_v2" selected>👑 Total Transformer V2 (700k Aperturas y Finales, C++)</option>
+                        <option value="engine_total_transformer128_4">👑 Total Transformer 128x4 (Aperturas y Finales 100%, C++)</option>
+                        <option value="engine_T_8x256">🔥 Rich Transformer (8 Heads, Dim 256, C++)</option>
+                        <option value="engine_T_4x128">⚡ Rich Transformer (4 Heads, Dim 128, C++)</option>
+                        <option value="minimax2">⚡ Táctico Selectivo (Minimax 2)</option>
+                        <option value="engine_T_medium">🔮 Transformer Profundo (238k params, C++)</option>
+                        <option value="engine_T_mini">🚀 Mini-Transformer (75k params, C++)</option>
+                        <option value="engine_NNUE">🧠 Red Neuronal NNUE (C++)</option>
+                        <option value="engine_original">⚙️ Negamax Clásico C++ (55 Heurísticas)</option>
+                        <option value="minimax1">🤖 Motor Python Base (Minimax 1)</option>
+                    </select>
+                </div>
+
+                <div class="option-group">
+                    <label for="analysis-depth">Profundidad (Depth N):</label>
+                    <select id="analysis-depth" class="custom-select">
+                        <option value="1">Nivel 1 (Inmediato)</option>
+                        <option value="2" selected>Nivel 2 (Estándar)</option>
+                        <option value="3">Nivel 3 (Profundo)</option>
+                        <option value="4">Nivel 4 (Avanzado)</option>
+                        <option value="5">Nivel 5 (Maestro)</option>
+                        <option value="6">Nivel 6 (Gran Maestro)</option>
+                        <option value="7">Nivel 7 (Super GM)</option>
+                        <option value="8">Nivel 8 (Cálculo Profundo)</option>
+                        <option value="9">Nivel 9 (Ultra Profundo)</option>
+                        <option value="10">Nivel 10 (Máximo Nivel)</option>
+                    </select>
+                </div>
+
+                <div class="option-group">
+                    <label for="analysis-strategy">Estrategia de Análisis:</label>
+                    <select id="analysis-strategy" class="custom-select">
+                        <option value="tactico" selected>🗡 Táctico Primero (Jaques, Capturas, Amenazas)</option>
+                        <option value="posicional">♟ Posicional Primero (Desarrollo, Piezas, Peones)</option>
+                        <option value="actividad">🔥 Actividad (Maximiza control de casillas propias)</option>
+                        <option value="ahogador">⛓ Ahogador (Minimiza control de casillas rivales)</option>
+                    </select>
+                </div>
+
+                <div class="option-group">
+                    <label for="tree-mode-select">Modo de Búsqueda de Árbol:</label>
+                    <select id="tree-mode-select" class="custom-select">
+                        <option value="cut">⚡ Poda Táctica (Rápido - Recomendado)</option>
+                        <option value="full" selected>🌳 Árbol Completo (Exhaustivo)</option>
+                    </select>
+                </div>
+
+                <div class="option-group">
+                    <label for="time-limit-select">Tiempo Máximo por Jugada:</label>
+                    <select id="time-limit-select" class="custom-select">
+                        <option value="off" selected>♾️ Sin Límite (Completar Profundidad)</option>
+                        <option value="3">⏱️ 3 Segundos</option>
+                        <option value="5">⏱️ 5 Segundos</option>
+                        <option value="10">⏱️ 10 Segundos</option>
+                        <option value="15">⏱️ 15 Segundos</option>
+                        <option value="30">⏱️ 30 Segundos</option>
+                    </select>
+                </div>
+
+                <div class="option-group" style="border-top:1px solid rgba(255,255,255,0.1); padding-top:10px; margin-top:10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <label style="font-weight:700; font-size:12px; color: var(--text-main);">🧠 55 Heurísticas MinimaxConfig:</label>
+                        <button id="btn-toggle-all-flags" type="button" class="btn btn-secondary btn-xs" style="font-size: 10px;">Activar Todas</button>
+                    </div>
+
+                    <!-- 1. Táctica y Ataque (9) -->
+                    <div style="margin-top:6px;">
+                        <details>
+                            <summary style="cursor:pointer; font-size:11px; font-weight:600; color:#93c5fd; padding: 2px 0;">⚔️ Táctica y Ataque (9 técnicas)</summary>
+                            <div style="font-size:11px; line-height:1.7; border-left:2px solid #3b82f6; padding-left:8px; margin-top:4px;">
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_forks" checked> 1. Tenedores y ataques dobles</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_pins_and_skewers" checked> 2. Clavadas y enfiladas</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_discovered_attacks" checked> 3. Ataques a la descubierta</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_battery" checked> 4. Baterías (Dama+Torre / Alfil)</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_pawn_fork_radar" checked> 5. Radar tenedores de peón</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_greek_gift_validation" checked> 6. Validación Greek Gift</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_tactica_avanzada" checked> 7. Forma Táctica T+2/T+3</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_quiescence" checked> 8. Quiescence Search</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_see" checked> 9. SEE (Static Exchange)</label>
+                            </div>
+                        </details>
+                    </div>
+
+                    <!-- 2. Defensa y Prevención (10) -->
+                    <div style="margin-top:6px;">
+                        <details>
+                            <summary style="cursor:pointer; font-size:11px; font-weight:600; color:#34d399; padding: 2px 0;">🛡️ Defensa y Blunders (10 técnicas)</summary>
+                            <div style="font-size:11px; line-height:1.7; border-left:2px solid #10b981; padding-left:8px; margin-top:4px;">
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_blunder_prevention" checked> 10. Prevención colgadas 1 jugada</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_undefended_pieces_radar" checked> 11. Radar piezas en el aire</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_threatened_pieces_radar" checked> 12. Radar piezas amenazadas</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_en_prise_piece_defense" checked> 13. Rescate piezas en prise</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_active_defense" checked> 14. Defensa activa y contraataque</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_defensive_emergency" checked> 15. Emergencia defensiva g2/g7</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_retreat_safety" checked> 16. Retiradas seguras</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_attacked_queen_capture_counter" checked> 17. Contraataque dama atacada</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_overpowered_piece_radar" checked> 18. Radar piezas sobrecargadas</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_speculative_knight_sacrifice_prevention" checked> 19. Prevención sacrificios caballo</label>
+                            </div>
+                        </details>
+                    </div>
+
+                    <!-- 3. Seguridad del Rey (8) -->
+                    <div style="margin-top:6px;">
+                        <details>
+                            <summary style="cursor:pointer; font-size:11px; font-weight:600; color:#facc15; padding: 2px 0;">👑 Seguridad del Rey (8 técnicas)</summary>
+                            <div style="font-size:11px; line-height:1.7; border-left:2px solid #eab308; padding-left:8px; margin-top:4px;">
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_king_safety" checked> 20. Seguridad general del rey</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_castling_incentive" checked> 21. Incentivo enroque (<=j12)</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_preserve_castling_rights" checked> 22. Conservar derecho a enroque</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_back_rank_safety" checked> 23. Seguridad 1ra fila (Luft)</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_back_rank_abandonment_prevention" checked> 24. Prev. abandono 1ra fila</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_fianchetto_hole_defense" checked> 25. Defensa huecos fianchetto</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_king_shelter_recentralize" checked> 26. Recentralización rey final</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_king_check_escape_defender_preservation" checked> 27. Preservar defensores jaque</label>
+                            </div>
+                        </details>
+                    </div>
+
+                    <!-- 4. Apertura y Tiempos (5) -->
+                    <div style="margin-top:6px;">
+                        <details>
+                            <summary style="cursor:pointer; font-size:11px; font-weight:600; color:#f472b6; padding: 2px 0;">⏳ Apertura y Tiempos (5 técnicas)</summary>
+                            <div style="font-size:11px; line-height:1.7; border-left:2px solid #ec4899; padding-left:8px; margin-top:4px;">
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_opening_development" checked> 28. Desarrollo de apertura</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_development_count" checked> 29. Conteo desarrollo menores</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_early_queen_penalty" checked> 30. Penalización dama prematura</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_tempo_opening" checked> 31. Ganancia tiempo apertura</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_tempo_penalty" checked> 32. Penalización pérdida tiempo</label>
+                            </div>
+                        </details>
+                    </div>
+
+                    <!-- 5. Estructura de Peones (9) -->
+                    <div style="margin-top:6px;">
+                        <details>
+                            <summary style="cursor:pointer; font-size:11px; font-weight:600; color:#a78bfa; padding: 2px 0;">♙ Estructura de Peones (9 técnicas)</summary>
+                            <div style="font-size:11px; line-height:1.7; border-left:2px solid #8b5cf6; padding-left:8px; margin-top:4px;">
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_pawn_structure" checked> 33. Integridad estructura peones</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_passed_pawn_bonus" checked> 34. Bonus peones pasados</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_passed_pawn_push_safety" checked> 35. Avance seguro peón pasado</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_pawn_breaks" checked> 36. Rupturas de peones</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_blockade" checked> 37. Bloqueo peones rivales</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_advanced_passed_pawn_stop_and_blockade" checked> 38. Freno peones 6ta/7ma fila</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_pawn_advance_threat_defense" checked> 39. Defensa avance de peón</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_central_tension_defense" checked> 40. Defensa tensión central</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_central_tension_resolution" checked> 41. Resolución tensión central</label>
+                            </div>
+                        </details>
+                    </div>
+
+                    <!-- 6. Piezas y Finales (14) -->
+                    <div style="margin-top:6px;">
+                        <details>
+                            <summary style="cursor:pointer; font-size:11px; font-weight:600; color:#fb923c; padding: 2px 0;">🏰 Piezas y Finales (14 técnicas)</summary>
+                            <div style="font-size:11px; line-height:1.7; border-left:2px solid #f97316; padding-left:8px; margin-top:4px;">
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_rooks_open_files" checked> 42. Torres en columnas abiertas</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_seventh_rank_defense" checked> 43. Control / defensa 7ma fila</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_bishop_pair" checked> 44. Pareja de alfiles</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_outposts" checked> 45. Puestos de avanzada</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_trapped_pieces" checked> 46. Prevención piezas atrapadas</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_mobility" checked> 47. Movilidad de piezas</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_pst" checked> 48. Piece-Square Tables (PST)</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_queen_activity" checked> 49. Actividad y centro de dama</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_queen_sacrifice_safety" checked> 50. Seguridad sacrificio dama</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_check_extensions" checked> 51. Extensión por Jaque</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_check_recapture_priority" checked> 52. Prioridad recaptura en jaque</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_endgame_eval" checked> 53. Evaluación de finales</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_mate_endgames" checked> 54. Mates finales (KQK/KRK)</label>
+                                <label style="display:block;"><input type="checkbox" data-engine-flag="use_mating_net_radar" checked> 55. Radar red de jaque mate</label>
+                            </div>
+                        </details>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="panel-card analysis-card">
+                <!-- Indicador Animado de Carga "Analizando..." -->
+                <div id="analysis-loading-indicator" class="analysis-loading-box hidden">
+                    <span class="spinner-icon">🧠</span>
+                    <span id="loading-text" class="loading-text">Analizando<span id="loading-dots">.</span></span>
+                </div>
+
+                <!-- Bloque de Explicación de la Jugada Anterior del Oponente -->
+                <div id="previous-move-box" class="previous-move-box hidden">
+                    <div class="previous-move-header">
+                        <span class="previous-icon">⏪</span>
+                        <strong id="prev-move-title">Última jugada</strong>
+                    </div>
+                    <p id="prev-move-explanation" class="previous-move-text">-</p>
+                </div>
+
+                <h2 id="analysis-title">Evaluación y Sugerencia</h2>
+
+                <div class="recommendation-box">
+                    <div class="recommendation-header">
+                        <span>Sugerencia:</span>
+                        <strong id="recommended-move-san" class="san-highlight">-</strong>
+                    </div>
+                    <div class="move-meta">
+                        <span id="analysis-type-badge" class="badge badge-tactical">Táctico</span>
+                        <span id="move-score" class="score-text">Puntaje: 0.0</span>
+                    </div>
+                </div>
+
+                <div class="explanation-box">
+                    <div class="explanation-title">📝 Explicación:</div>
+                    <p id="analysis-body">Haz un movimiento o solicita sugerencia para ver la explicación detallada.</p>
+                </div>
+
+                <button id="btn-suggest-move" class="btn btn-primary btn-block">💡 Pedir Sugerencia al Motor</button>
+                <button id="btn-live-analysis" class="btn btn-secondary btn-block hidden">🔴 Volver al Análisis en
+                    Vivo</button>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Modal para Pegar PGN / Historial de Jugadas -->
+    <div id="paste-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>📥 Pegar Historial de Jugadas (PGN)</h3>
+                <button id="btn-close-paste-modal" class="btn-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Pega a continuación el historial de jugadas en formato SAN (ej:
+                    <code>1. e4 d5 2. exd5 Qxd5...</code>) o movimientos simples:</p>
+                <textarea id="paste-pgn-input" class="custom-textarea" rows="8"
+                    placeholder="1. e4 d5 2. exd5 Qxd5 3. Nc3 Qd7..."></textarea>
+            </div>
+            <div class="modal-footer">
+                <button id="btn-cancel-paste" class="btn btn-secondary">Cancelar</button>
+                <button id="btn-submit-paste" class="btn btn-primary">Cargar Partida</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Promoción de Peón -->
+    <div id="promotion-modal" class="modal-overlay hidden">
+        <div class="modal-content text-center">
+            <div class="modal-header">
+                <h3>👑 Promoción / Coronación de Peón</h3>
+            </div>
+            <div class="modal-body">
+                <p>Selecciona la pieza a la que deseas coronar tu peón:</p>
+                <div class="promotion-choices">
+                    <button class="btn btn-promotion" data-piece="q" title="Dama">♛ Dama</button>
+                    <button class="btn btn-promotion" data-piece="r" title="Torre">♜ Torre</button>
+                    <button class="btn btn-promotion" data-piece="b" title="Alfil">♝ Alfil</button>
+                    <button class="btn btn-promotion" data-piece="n" title="Caballo">♞ Caballo</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-msg" class="toast hidden">Notificación</div>
+
+    <script src="{{ url_for('static', filename='js/board.js') }}?v=1.1.2"></script>
+</body>
+
+</html>
