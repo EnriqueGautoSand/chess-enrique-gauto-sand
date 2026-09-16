@@ -369,76 +369,76 @@ class GameEngine:
                     self.engine_depth = int(depth)
                 except (ValueError, TypeError):
                     pass
-        if strategy is not None:
-            self.engine_strategy = strategy
-        if engine_version is not None:
-            self.engine_version = engine_version
-        if config is not None:
-            self.engine_config = config
+            if strategy is not None:
+                self.engine_strategy = strategy
+            if engine_version is not None:
+                self.engine_version = engine_version
+            if config is not None:
+                self.engine_config = config
 
-        if truncate_at is not None:
-            self.truncate_history(truncate_at)
+            if truncate_at is not None:
+                self.truncate_history(truncate_at)
 
-        if self.board.is_game_over():
-            return {"success": False, "message": "La partida ya ha finalizado."}
+            if self.board.is_game_over():
+                return {"success": False, "message": "La partida ya ha finalizado."}
 
-        fen_before = self.board.fen()
-        board_before = self.board.copy(stack=False)
+            fen_before = self.board.fen()
+            board_before = self.board.copy(stack=False)
 
-        try:
-            from_square = chess.parse_square(from_sq)
-            to_square = chess.parse_square(to_sq)
-            piece = self.board.piece_at(from_square)
-            
-            promo_choice = promotion if promotion else "q"
-            uci_str = f"{from_sq}{to_sq}"
-            if piece and piece.piece_type == chess.PAWN:
-                target_rank = chess.square_rank(to_square)
-                if (piece.color == chess.WHITE and target_rank == 7) or (piece.color == chess.BLACK and target_rank == 0):
-                    uci_str += promo_choice.lower()
-            
-            move = chess.Move.from_uci(uci_str)
-        except ValueError:
-            return {"success": False, "message": "Formato de casilla o movimiento inválido."}
+            try:
+                from_square = chess.parse_square(from_sq)
+                to_square = chess.parse_square(to_sq)
+                piece = self.board.piece_at(from_square)
+                
+                promo_choice = promotion if promotion else "q"
+                uci_str = f"{from_sq}{to_sq}"
+                if piece and piece.piece_type == chess.PAWN:
+                    target_rank = chess.square_rank(to_square)
+                    if (piece.color == chess.WHITE and target_rank == 7) or (piece.color == chess.BLACK and target_rank == 0):
+                        uci_str += promo_choice.lower()
+                
+                move = chess.Move.from_uci(uci_str)
+            except ValueError:
+                return {"success": False, "message": "Formato de casilla o movimiento inválido."}
 
-        if move in self.board.legal_moves:
-            san = self.board.san(move)
-            start_t = time.time()
-            exp_info = self.ai_engine.explicar_movimiento_realizado(board_before, move, depth=self.engine_depth, strategy=self.engine_strategy)
-            elapsed_s = round(time.time() - start_t, 2)
-            self.board.push(move)
-            fen_after = self.board.fen()
+            if move in self.board.legal_moves:
+                san = self.board.san(move)
+                start_t = time.time()
+                exp_info = self.ai_engine.explicar_movimiento_realizado(board_before, move, depth=self.engine_depth, strategy=self.engine_strategy)
+                elapsed_s = round(time.time() - start_t, 2)
+                self.board.push(move)
+                fen_after = self.board.fen()
 
-            self.move_history.append({
-                "from": from_sq,
-                "to": to_sq,
-                "san": san,
-                "uci": move.uci(),
-                "fen_before": fen_before,
-                "fen_after": fen_after,
-                "fen_grid": self.build_grid_from_fen(fen_after),
-                "explanation": exp_info.get("explanation", f"Movimiento ejecutado: {san}"),
-                "type": exp_info.get("type", "posicional"),
-                "category": exp_info.get("category", ""),
-                "time_seconds": elapsed_s
-            })
-            
-            ai_move_result = None
+                self.move_history.append({
+                    "from": from_sq,
+                    "to": to_sq,
+                    "san": san,
+                    "uci": move.uci(),
+                    "fen_before": fen_before,
+                    "fen_after": fen_after,
+                    "fen_grid": self.build_grid_from_fen(fen_after),
+                    "explanation": exp_info.get("explanation", f"Movimiento ejecutado: {san}"),
+                    "type": exp_info.get("type", "posicional"),
+                    "category": exp_info.get("category", ""),
+                    "time_seconds": elapsed_s
+                })
+                
+                ai_move_result = None
 
-            is_ai_turn = (self.game_mode == "pve") and not self.board.is_game_over()
-            if is_ai_turn:
-                engine_color = chess.BLACK if self.player_color == "white" else chess.WHITE
-                if self.board.turn == engine_color:
-                    ai_move_result = self.make_ai_move(tree_mode=tree_mode, time_limit=time_limit, config=self.engine_config)
+                is_ai_turn = (self.game_mode == "pve") and not self.board.is_game_over()
+                if is_ai_turn:
+                    engine_color = chess.BLACK if self.player_color == "white" else chess.WHITE
+                    if self.board.turn == engine_color:
+                        ai_move_result = self.make_ai_move(tree_mode=tree_mode, time_limit=time_limit, config=self.engine_config)
 
-            return {
-                "success": True,
-                "san": san,
-                "state": self.get_board_state(),
-                "ai_move": ai_move_result
-            }
-        else:
-            return {"success": False, "message": "Movimiento ilegal según las reglas del ajedrez."}
+                return {
+                    "success": True,
+                    "san": san,
+                    "state": self.get_board_state(),
+                    "ai_move": ai_move_result
+                }
+            else:
+                return {"success": False, "message": "Movimiento ilegal según las reglas del ajedrez."}
 
     def make_ai_move(self, depth: Optional[int] = None, strategy: Optional[str] = None, tree_mode: str = "cut", time_limit: Optional[float] = None, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """

@@ -96,6 +96,8 @@ class ChessBoardUI {
         this.analysisDebounceTimer = null;
         this.latestAnalysisRequestId = 0;
         this.currentAbortController = null;
+        this.isProcessingMove = false;
+        this.draggedSquare = null;
 
         this.init();
     }
@@ -1060,6 +1062,7 @@ class ChessBoardUI {
                     }
 
                     pieceElem.addEventListener('dragstart', (e) => this.handleDragStart(e, squareName));
+                    pieceElem.addEventListener('dragend', (e) => this.handleDragEnd(e));
                     squareElem.appendChild(pieceElem);
                 }
 
@@ -1076,7 +1079,10 @@ class ChessBoardUI {
                 }
 
                 squareElem.addEventListener('click', () => this.handleSquareClick(squareName));
-                squareElem.addEventListener('dragover', (e) => e.preventDefault());
+                squareElem.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+                });
                 squareElem.addEventListener('drop', (e) => this.handleDrop(e, squareName));
 
                 this.boardElement.appendChild(squareElem);
@@ -1086,7 +1092,43 @@ class ChessBoardUI {
         this.updateNavIndicatorUI();
     }
 
+    clearLegalMoveIndicators() {
+        if (!this.boardElement) return;
+        this.boardElement.querySelectorAll('.legal-dot, .legal-ring').forEach(el => el.remove());
+        this.boardElement.querySelectorAll('.square.selected').forEach(el => el.classList.remove('selected'));
+    }
+
+    highlightLegalMoveIndicators() {
+        if (!this.boardElement) return;
+        this.clearLegalMoveIndicators();
+
+        if (this.selectedSquare) {
+            const selectedElem = this.boardElement.querySelector(`.square[data-square="${this.selectedSquare}"]`);
+            if (selectedElem) selectedElem.classList.add('selected');
+        }
+
+        if (!this.legalDestinations || this.legalDestinations.length === 0) return;
+
+        for (const dest of this.legalDestinations) {
+            const sqElem = this.boardElement.querySelector(`.square[data-square="${dest}"]`);
+            if (!sqElem) continue;
+
+            const cell = this.getCellInfo(dest);
+            if (cell && cell.type) {
+                const ring = document.createElement('div');
+                ring.className = 'legal-ring';
+                sqElem.appendChild(ring);
+            } else {
+                const dot = document.createElement('div');
+                dot.className = 'legal-dot';
+                sqElem.appendChild(dot);
+            }
+        }
+    }
+
     async handleSquareClick(squareName) {
+        if (this.isProcessingMove) return;
+
         if (this.selectedSquare && this.legalDestinations.includes(squareName)) {
             await this.attemptMove(this.selectedSquare, squareName);
             return;
@@ -1095,7 +1137,7 @@ class ChessBoardUI {
         if (this.selectedSquare === squareName) {
             this.selectedSquare = null;
             this.legalDestinations = [];
-            this.renderBoard();
+            this.clearLegalMoveIndicators();
             return;
         }
 
@@ -1105,6 +1147,7 @@ class ChessBoardUI {
         if (cell && cell.color === activeTurn) {
             this.selectedSquare = squareName;
             await this.fetchLegalMoves(squareName);
+            this.highlightLegalMoveIndicators();
         } else {
             if (cell && cell.color && this.viewedHistoryIndex !== null) {
                 const isUserPiece = cell.color === (this.colorSelect ? this.colorSelect.value : 'white');
@@ -1115,8 +1158,8 @@ class ChessBoardUI {
             }
             this.selectedSquare = null;
             this.legalDestinations = [];
+            this.clearLegalMoveIndicators();
         }
-        this.renderBoard();
     }
 
     async fetchLegalMoves(squareName) {
@@ -1135,12 +1178,27 @@ class ChessBoardUI {
     }
 
     handleDragStart(e, squareName) {
+        if (this.isProcessingMove) {
+            e.preventDefault();
+            return;
+        }
+
         const cell = this.getCellInfo(squareName);
         const activeTurn = this.getActiveTurn();
         if (cell && cell.color === activeTurn) {
             this.selectedSquare = squareName;
-            e.dataTransfer.setData('text/plain', squareName);
-            this.fetchLegalMoves(squareName).then(() => this.renderBoard());
+            this.draggedSquare = squareName;
+            if (this.boardElement) this.boardElement.classList.add('is-dragging');
+            if (e.dataTransfer) {
+                e.dataTransfer.setData('text/plain', squareName);
+                e.dataTransfer.effectAllowed = 'move';
+            }
+            // Obtener destinos legales e iluminar en el DOM existente SIN destruir el tablero
+            this.fetchLegalMoves(squareName).then(() => {
+                if (this.draggedSquare === squareName || this.selectedSquare === squareName) {
+                    this.highlightLegalMoveIndicators();
+                }
+            });
         } else {
             if (cell && cell.color && this.viewedHistoryIndex !== null) {
                 const isUserPiece = cell.color === (this.colorSelect ? this.colorSelect.value : 'white');
@@ -1153,11 +1211,25 @@ class ChessBoardUI {
         }
     }
 
+    handleDragEnd(e) {
+        this.draggedSquare = null;
+        if (this.boardElement) this.boardElement.classList.remove('is-dragging');
+    }
+
     async handleDrop(e, targetSquare) {
         e.preventDefault();
-        const fromSquare = e.dataTransfer.getData('text/plain');
-        if (fromSquare && this.legalDestinations.includes(targetSquare)) {
+        if (this.boardElement) this.boardElement.classList.remove('is-dragging');
+        if (this.isProcessingMove) return;
+
+        const fromSquare = (e.dataTransfer && e.dataTransfer.getData('text/plain')) || this.draggedSquare || this.selectedSquare;
+        this.draggedSquare = null;
+
+        if (fromSquare && targetSquare && fromSquare !== targetSquare && this.legalDestinations.includes(targetSquare)) {
             await this.attemptMove(fromSquare, targetSquare);
+        } else {
+            this.clearLegalMoveIndicators();
+            this.selectedSquare = null;
+            this.legalDestinations = [];
         }
     }
 
@@ -1183,6 +1255,13 @@ class ChessBoardUI {
     }
 
     async executeMove(fromSquare, toSquare, promotion = null) {
+        if (this.isProcessingMove) return;
+        this.isProcessingMove = true;
+
+        this.selectedSquare = null;
+        this.legalDestinations = [];
+        this.clearLegalMoveIndicators();
+
         const depth = this.analysisDepthSelect ? this.analysisDepthSelect.value : 2;
         const strategy = this.analysisStrategySelect ? this.analysisStrategySelect.value : 'tactico';
         const engineVersion = this.engineVersionSelect ? this.engineVersionSelect.value : 'minimax2';
@@ -1191,12 +1270,15 @@ class ChessBoardUI {
 
         const truncateIdx = (this.viewedHistoryIndex !== null) ? this.viewedHistoryIndex : null;
 
+        // Snapshot de seguridad para revertir si la petición falla
+        const gridSnapshot = JSON.parse(JSON.stringify(this.getActiveGrid() || []));
+        const turnSnapshot = this.currentGameState ? this.currentGameState.turn : 'white';
+
         // Renderizado instantáneo local para cero retraso en UI
         this.applyOptimisticMove(fromSquare, toSquare);
         
         const isPvE = (this.gameModeSelect ? this.gameModeSelect.value : 'pvp') === 'pve';
         if (isPvE) {
-            // Cambiar optimistamente la indicación de turno al motor para reflejar el cálculo inmediato
             const userColor = this.colorSelect ? this.colorSelect.value : 'white';
             const engineColor = (userColor === 'white') ? 'black' : 'white';
             if (this.currentGameState) {
@@ -1228,6 +1310,12 @@ class ChessBoardUI {
                 })
             });
             if (!res.ok) {
+                if (this.currentGameState) {
+                    this.currentGameState.grid = gridSnapshot;
+                    this.currentGameState.turn = turnSnapshot;
+                }
+                this.renderBoard();
+                this.updateStatusUI();
                 alert("Error de comunicación con el servidor.");
                 return;
             }
@@ -1235,24 +1323,28 @@ class ChessBoardUI {
 
             if (data.success) {
                 this.viewedHistoryIndex = null;
-
-                if (isPvE) {
-                    // En modo PvE: actualizar el tablero SIN calcular sugerencia automáticamente.
-                    // El usuario puede pedir sugerencia con el botón cuando lo desee.
-                    this.updateBoardState(data, { skipAnalysis: true });
-                    this.clearSuggestionUI();
-                } else {
-                    // En PvP: tampoco disparar análisis automático, solo actualizar tablero.
-                    this.updateBoardState(data, { skipAnalysis: true });
-                    this.clearSuggestionUI();
-                }
+                this.updateBoardState(data, { skipAnalysis: true });
+                this.clearSuggestionUI();
             } else {
+                if (this.currentGameState) {
+                    this.currentGameState.grid = gridSnapshot;
+                    this.currentGameState.turn = turnSnapshot;
+                }
+                this.renderBoard();
+                this.updateStatusUI();
                 alert(data.message || "Movimiento no permitido.");
             }
         } catch (err) {
             console.error("Error al realizar movimiento:", err);
+            if (this.currentGameState) {
+                this.currentGameState.grid = gridSnapshot;
+                this.currentGameState.turn = turnSnapshot;
+            }
+            this.renderBoard();
+            this.updateStatusUI();
         } finally {
             this.stopLoadingAnimation();
+            this.isProcessingMove = false;
         }
     }
 

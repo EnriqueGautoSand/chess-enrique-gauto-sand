@@ -24,6 +24,10 @@ else:
 def index():
     return render_template("index.html")
 
+@app.route("/favicon.ico")
+def favicon():
+    return "", 204
+
 @app.route("/custom_images/<path:filename>")
 def serve_custom_image(filename):
     """Sirve imágenes personalizadas almacenadas en la carpeta imagenes."""

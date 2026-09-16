@@ -843,6 +843,10 @@ body {
     cursor: grabbing;
 }
 
+.is-dragging .piece {
+    pointer-events: none;
+}
+
 .unicode-piece {
     font-family: "Segoe UI Symbol", "DejaVu Sans", "Arial Unicode MS", sans-serif;
     font-weight: normal;
