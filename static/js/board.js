@@ -197,8 +197,9 @@ class ChessBoardUI {
             });
         }
 
-        // Selector de Versión del Motor (Minimax 1 vs Minimax 2)
+        // Selector de Versión del Motor (por defecto Táctico Selectivo Minimax 2)
         if (this.engineVersionSelect) {
+            this.engineVersionSelect.value = 'minimax2';
             this.engineVersionSelect.addEventListener('change', () => this.onEngineVersionChanged());
         }
 
