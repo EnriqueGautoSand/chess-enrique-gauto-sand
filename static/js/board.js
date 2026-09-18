@@ -465,9 +465,11 @@ class ChessBoardUI {
                         const prof = data.profiles[k];
                         const opt = document.createElement('option');
                         opt.value = k;
+                        const isSublevel = !isNaN(parseInt(k)) && parseInt(k) <= 300;
+                        const icon = k === 'MAX' ? '🏆' : (isSublevel ? '🌱' : '🎯');
                         const label = k === 'MAX' 
                             ? '🏆 MAX - Todas las 55 Heurísticas (Maestro 2600+)' 
-                            : `🎯 ${prof.elo_range} (${prof.total_active_techniques}/55 técnicas)`;
+                            : `${icon} ${prof.elo_range} (${prof.total_active_techniques}/55 técnicas)`;
                         opt.textContent = label;
                         if (k === selectedVal) opt.selected = true;
                         this.eloLevelSelect.appendChild(opt);
@@ -511,7 +513,8 @@ class ChessBoardUI {
         if (this.eloBadgeInfo) {
             const recDepth = prof.recommended_depth || 4;
             const recQDepth = prof.recommended_qdepth !== undefined ? prof.recommended_qdepth : 8;
-            const label = eloVal === 'MAX' ? 'Perfil MAX' : `Perfil Elo ${eloVal}`;
+            const isSublevel = !isNaN(parseInt(eloVal)) && parseInt(eloVal) <= 300;
+            const label = eloVal === 'MAX' ? 'Perfil MAX' : (isSublevel ? prof.elo_range : `Perfil Elo ${eloVal}`);
             if (isMinimax1) {
                 this.eloBadgeInfo.innerHTML = `<span style="color:#fbbf24;">⚡ Minimax 1 (Clásico C++): Fuerza bruta fija | Flags de Elo aplican en Minimax 2</span>`;
             } else {
@@ -524,7 +527,9 @@ class ChessBoardUI {
         }
 
         if (showToast) {
-            this.showToast(`Perfil ${eloVal === 'MAX' ? 'MAX' : 'Elo ' + eloVal} aplicado (${activeCount} técnicas activadas)`);
+            const isSublevel = !isNaN(parseInt(eloVal)) && parseInt(eloVal) <= 300;
+            const toastLabel = eloVal === 'MAX' ? 'MAX' : (isSublevel ? prof.elo_range : 'Elo ' + eloVal);
+            this.showToast(`Perfil ${toastLabel} aplicado (${activeCount} técnicas activadas)`);
         }
 
         this.updateEloCoachingBanner(eloVal);
@@ -603,6 +608,11 @@ class ChessBoardUI {
         // Técnicas que se habilitan en el siguiente nivel
         const nextCfg = nextProf.config || {};
         const techNames = {
+            'use_early_queen_penalty': 'Penalización por sacar Dama prematura',
+            'use_preserve_castling_rights': 'Preservación de enroque',
+            'use_mate_endgames': 'Mates elementales de final',
+            'use_endgame_eval': 'Evaluación de finales',
+            'use_pst': 'Piece-Square Tables (PST: juego posicional y control central)',
             'use_forks': 'Tenedores y ataques dobles directos (T+1)',
             'use_pins_and_skewers': 'Clavadas y enfiladas',
             'use_discovered_attacks': 'Ataques a la descubierta',
@@ -625,10 +635,13 @@ class ChessBoardUI {
             }
         }
 
+        const currentTitle = prof.elo_range ? prof.elo_range : `Elo ${currentElo}`;
+        const nextTitle = nextProf.elo_range ? nextProf.elo_range : (nextKey === 'MAX' ? 'MAX (2600+)' : `Elo ${nextKey}`);
+
         let html = `
             <div class="elo-coaching-header">
-                <span>💡 Guía Táctica para Superar Elo ${currentElo}</span>
-                <span class="elo-coaching-badge">Meta: Elo ${nextKey}</span>
+                <span>💡 Guía Táctica para Superar ${currentTitle}</span>
+                <span class="elo-coaching-badge">Meta: ${nextTitle}</span>
             </div>
             <div class="elo-coaching-row">
                 🧠 <strong>Cálculo para Ganarle:</strong> Este nivel piensa a <strong>Profundidad ${recDepth} (${currentMoves} ${currentMoves === 1 ? 'jugada completa' : 'jugadas completas'})</strong> + <strong>${recQDepth} plies de capturas</strong>. Para superarlo, calcula a <strong>Profundidad ${targetDepthToWin} (${targetMoves} jugadas completas)</strong> y adelántate a sus respuestas.
@@ -647,14 +660,14 @@ class ChessBoardUI {
         if (newTechniques.length > 0) {
             html += `
                 <div class="elo-coaching-row" style="margin-top: 5px;">
-                    <strong>🚀 En el siguiente nivel (Elo ${nextKey}) se habilita:</strong>
+                    <strong>🚀 En el siguiente nivel (${nextTitle}) se habilita:</strong>
                     <div class="elo-coaching-next">✨ ${newTechniques.join(' • ')} (Depth ${nextDepth}, Quiescence ${nextQDepth} plies).</div>
                 </div>
             `;
         } else {
             html += `
                 <div class="elo-coaching-row" style="margin-top: 5px;">
-                    <strong>🚀 Próximo Nivel (Elo ${nextKey}):</strong>
+                    <strong>🚀 Próximo Nivel (${nextTitle}):</strong>
                     <div class="elo-coaching-next">Profundidad ${nextDepth} plies | Quiescence ${nextQDepth} plies | ${nextProf.total_active_techniques || 'Más'} técnicas activas.</div>
                 </div>
             `;

@@ -217,4 +217,20 @@ def analyze():
     return jsonify(res)
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000, threaded=True)
+    import socket
+    local_ip = "127.0.0.1"
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        pass
+
+    print("\n" + "=" * 55)
+    print("  TABLERO DE AJEDREZ INICIADO:")
+    print(f"   - En esta PC:          http://127.0.0.1:5000")
+    print(f"   - Otras PCs en la LAN: http://{local_ip}:5000")
+    print("=" * 55 + "\n")
+
+    app.run(host="0.0.0.0", port=5000, debug=True, threaded=True)
