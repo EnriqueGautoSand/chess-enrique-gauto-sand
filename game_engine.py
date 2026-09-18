@@ -716,6 +716,14 @@ class GameEngine:
             elif self.board.is_check():
                 res_msg = "¡Jaque!"
 
+            legal_moves_map: Dict[str, List[str]] = {}
+            for move in self.board.legal_moves:
+                fsq = chess.square_name(move.from_square)
+                tsq = chess.square_name(move.to_square)
+                if fsq not in legal_moves_map:
+                    legal_moves_map[fsq] = []
+                legal_moves_map[fsq].append(tsq)
+
             return {
                 "turn": "white" if self.board.turn == chess.WHITE else "black",
                 "is_check": self.board.is_check(),
@@ -728,7 +736,8 @@ class GameEngine:
                 "player_color": self.player_color,
                 "game_mode": self.game_mode,
                 "eval_white": eval_white,
-                "engine_version": self.engine_version
+                "engine_version": self.engine_version,
+                "legal_moves_map": legal_moves_map
             }
 
     def build_grid_from_board(self, board_obj: chess.Board) -> List[List[Dict[str, Any]]]:

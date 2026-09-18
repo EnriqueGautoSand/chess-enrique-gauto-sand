@@ -98,6 +98,8 @@ class ChessBoardUI {
         this.currentAbortController = null;
         this.isProcessingMove = false;
         this.draggedSquare = null;
+        this.legalMovesMap = {};
+        this.justDropped = false;
 
         this.init();
     }
@@ -339,8 +341,10 @@ class ChessBoardUI {
     updateBoardState(stateOrData, { skipAnalysis = false } = {}) {
         if (!stateOrData) return;
         this.currentGameState = stateOrData.state ? stateOrData.state : stateOrData;
+        this.legalMovesMap = (this.currentGameState && this.currentGameState.legal_moves_map) ? this.currentGameState.legal_moves_map : {};
         this.selectedSquare = null;
         this.legalDestinations = [];
+        this.justDropped = false;
         this.renderLabels();
         this.renderBoard();
         this.updateStatusUI();
@@ -1076,6 +1080,10 @@ class ChessBoardUI {
 
                     pieceElem.addEventListener('dragstart', (e) => this.handleDragStart(e, squareName));
                     pieceElem.addEventListener('dragend', (e) => this.handleDragEnd(e));
+                    pieceElem.addEventListener('dragover', (e) => {
+                        e.preventDefault();
+                        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+                    });
                     squareElem.appendChild(pieceElem);
                 }
 
@@ -1139,10 +1147,21 @@ class ChessBoardUI {
         }
     }
 
+    getLegalDestinationsForSquare(squareName) {
+        if (this.viewedHistoryIndex === null && this.legalMovesMap) {
+            return this.legalMovesMap[squareName] ? [...this.legalMovesMap[squareName]] : [];
+        }
+        return null;
+    }
+
     async handleSquareClick(squareName) {
         if (this.isProcessingMove) return;
+        if (this.justDropped) {
+            this.justDropped = false;
+            return;
+        }
 
-        if (this.selectedSquare && this.legalDestinations.includes(squareName)) {
+        if (this.selectedSquare && this.legalDestinations && this.legalDestinations.includes(squareName)) {
             await this.attemptMove(this.selectedSquare, squareName);
             return;
         }
@@ -1159,8 +1178,16 @@ class ChessBoardUI {
 
         if (cell && cell.color === activeTurn) {
             this.selectedSquare = squareName;
-            await this.fetchLegalMoves(squareName);
-            this.highlightLegalMoveIndicators();
+            const fastDests = this.getLegalDestinationsForSquare(squareName);
+            if (fastDests !== null) {
+                // Modo tiempo real: resolución instantánea en 0ms sin esperar al servidor
+                this.legalDestinations = fastDests;
+                this.highlightLegalMoveIndicators();
+            } else {
+                // Modo histórico: consultar al servidor
+                await this.fetchLegalMoves(squareName);
+                this.highlightLegalMoveIndicators();
+            }
         } else {
             if (cell && cell.color && this.viewedHistoryIndex !== null) {
                 const isUserPiece = cell.color === (this.colorSelect ? this.colorSelect.value : 'white');
@@ -1201,17 +1228,28 @@ class ChessBoardUI {
         if (cell && cell.color === activeTurn) {
             this.selectedSquare = squareName;
             this.draggedSquare = squareName;
-            if (this.boardElement) this.boardElement.classList.add('is-dragging');
+
+            // Iluminación instantánea de opciones válidas (0ms)
+            const fastDests = this.getLegalDestinationsForSquare(squareName);
+            if (fastDests !== null) {
+                this.legalDestinations = fastDests;
+                this.highlightLegalMoveIndicators();
+            } else {
+                this.fetchLegalMoves(squareName).then(() => {
+                    if (this.draggedSquare === squareName || this.selectedSquare === squareName) {
+                        this.highlightLegalMoveIndicators();
+                    }
+                });
+            }
+
+            if (e.target && e.target.classList) {
+                e.target.classList.add('dragging');
+            }
+
             if (e.dataTransfer) {
                 e.dataTransfer.setData('text/plain', squareName);
                 e.dataTransfer.effectAllowed = 'move';
             }
-            // Obtener destinos legales e iluminar en el DOM existente SIN destruir el tablero
-            this.fetchLegalMoves(squareName).then(() => {
-                if (this.draggedSquare === squareName || this.selectedSquare === squareName) {
-                    this.highlightLegalMoveIndicators();
-                }
-            });
         } else {
             if (cell && cell.color && this.viewedHistoryIndex !== null) {
                 const isUserPiece = cell.color === (this.colorSelect ? this.colorSelect.value : 'white');
@@ -1225,21 +1263,47 @@ class ChessBoardUI {
     }
 
     handleDragEnd(e) {
+        if (e.target && e.target.classList) {
+            e.target.classList.remove('dragging');
+        }
+        if (this.boardElement) {
+            this.boardElement.querySelectorAll('.piece.dragging').forEach(p => p.classList.remove('dragging'));
+        }
         this.draggedSquare = null;
-        if (this.boardElement) this.boardElement.classList.remove('is-dragging');
     }
 
     async handleDrop(e, targetSquare) {
         e.preventDefault();
-        if (this.boardElement) this.boardElement.classList.remove('is-dragging');
+        this.justDropped = true;
+        setTimeout(() => { this.justDropped = false; }, 250);
+
+        if (this.boardElement) {
+            this.boardElement.querySelectorAll('.piece.dragging').forEach(p => p.classList.remove('dragging'));
+        }
+
         if (this.isProcessingMove) return;
 
         const fromSquare = (e.dataTransfer && e.dataTransfer.getData('text/plain')) || this.draggedSquare || this.selectedSquare;
         this.draggedSquare = null;
 
-        if (fromSquare && targetSquare && fromSquare !== targetSquare && this.legalDestinations.includes(targetSquare)) {
+        if (!fromSquare || !targetSquare || fromSquare === targetSquare) {
+            this.clearLegalMoveIndicators();
+            this.selectedSquare = null;
+            this.legalDestinations = [];
+            return;
+        }
+
+        // Determinar destinos legales ya calculados o en caché
+        let legalDests = this.legalDestinations;
+        if (!legalDests || legalDests.length === 0) {
+            const fast = this.getLegalDestinationsForSquare(fromSquare);
+            if (fast && fast.length > 0) legalDests = fast;
+        }
+
+        if (legalDests && legalDests.includes(targetSquare)) {
             await this.attemptMove(fromSquare, targetSquare);
         } else {
+            // Si no es un destino legal, limpiar indicadores
             this.clearLegalMoveIndicators();
             this.selectedSquare = null;
             this.legalDestinations = [];

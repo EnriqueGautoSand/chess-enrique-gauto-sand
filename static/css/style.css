@@ -843,8 +843,9 @@ body {
     cursor: grabbing;
 }
 
-.is-dragging .piece {
-    pointer-events: none;
+.piece.dragging {
+    opacity: 0.35;
+    cursor: grabbing;
 }
 
 .unicode-piece {
