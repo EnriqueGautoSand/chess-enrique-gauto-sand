@@ -45,6 +45,7 @@ class Minimax2Engine:
         self.posicional_eval = PosicionalEvaluator()
         self.defensa_eval = DefensaAdaptativaEvaluator()
         self.finales_eval = FinalesEvaluator()
+        self._sublevel_minus_one_mode = None
         
         # Atributos mock para ser compatible con GameEngine
         class MockTT:
@@ -408,6 +409,168 @@ class Minimax2Engine:
         except Exception:
             return self.evaluar_material(board)
 
+    def _es_movimiento_seguro_subnivel(self, board: chess.Board, move: chess.Move) -> bool:
+        """
+        Determina si un movimiento para el Subnivel -1 es seguro conforme a
+        use_blunder_prevention + use_see (no permitir mate en 1 del rival ni regalar la pieza).
+        """
+        board.push(move)
+        try:
+            # 1. ¿El rival tiene mate en 1 contra nosotros?
+            if board.is_checkmate():
+                return False
+            for opp_move in board.legal_moves:
+                if board.gives_check(opp_move):
+                    board.push(opp_move)
+                    is_mate = board.is_checkmate()
+                    board.pop()
+                    if is_mate:
+                        return False
+
+            # 2. ¿La pieza movida quedó atacada y en desventaja de intercambio (SEE < 0)?
+            to_sq = move.to_square
+            color_rival = board.turn
+            color_propio = not color_rival
+
+            if board.is_attacked_by(color_rival, to_sq):
+                p_moved = board.piece_at(to_sq)
+                val_moved = VALORES_PIEZAS.get(p_moved.piece_type, 1.0) if p_moved else 1.0
+                defensores = board.attackers(color_propio, to_sq)
+                atacantes = board.attackers(color_rival, to_sq)
+
+                # Si no está defendida y nos atacan -> colgada directa en 1
+                if not defensores:
+                    return False
+
+                # Si algún atacante vale menos que la pieza movida (ej. peón atacando a Dama o Rey)
+                for att_sq in atacantes:
+                    att_p = board.piece_at(att_sq)
+                    if att_p and VALORES_PIEZAS.get(att_p.piece_type, 1.0) < val_moved:
+                        return False
+
+                # Usar SEE si el rival captura
+                for att_sq in atacantes:
+                    cap_m = chess.Move(att_sq, to_sq)
+                    if cap_m in board.legal_moves:
+                        ganancia = self.intercambios._calcular_see(board, cap_m)
+                        if ganancia > 0.0:
+                            return False
+
+            # 3. ¿Alguna otra pieza valiosa propia quedó colgada y atacada sin defensores?
+            for sq in chess.SQUARES:
+                p = board.piece_at(sq)
+                if p and p.color == color_propio and p.piece_type in (chess.QUEEN, chess.ROOK, chess.BISHOP, chess.KNIGHT):
+                    if board.is_attacked_by(color_rival, sq):
+                        defs = board.attackers(color_propio, sq)
+                        if not defs:
+                            return False
+                        for att_sq in board.attackers(color_rival, sq):
+                            att_p = board.piece_at(att_sq)
+                            if att_p and VALORES_PIEZAS.get(att_p.piece_type, 1.0) < VALORES_PIEZAS.get(p.piece_type, 1.0):
+                                return False
+
+            return True
+        finally:
+            board.pop()
+
+    def seleccionar_movimiento_subnivel_menos_uno(self, board: chess.Board, config: Optional[Dict[str, Any]] = None) -> Optional[chess.Move]:
+        """
+        Función aleatoria exclusiva para el Subnivel -1:
+        Decide aleatoriamente si priorizar sacar la Dama primero o el Rey primero (ej. estilo Bongcloud).
+        Una vez que sale la primera pieza, prioriza sacar la otra inmediatamente.
+        Todas las jugadas están estrictamente filtradas por use_blunder_prevention + use_see.
+        """
+        import random
+        if board.ply() <= 1 or getattr(self, "_sublevel_minus_one_mode", None) is None:
+            self._sublevel_minus_one_mode = random.choice(["queen_first", "king_first"])
+
+        mode = self._sublevel_minus_one_mode
+        color = board.turn
+        init_q = chess.D1 if color == chess.WHITE else chess.D8
+        init_k = chess.E1 if color == chess.WHITE else chess.E8
+
+        queen_present = bool(board.pieces(chess.QUEEN, color))
+        queen_has_moved = (not queen_present) or (board.piece_at(init_q) is None or board.piece_at(init_q).piece_type != chess.QUEEN)
+        king_has_moved = (board.piece_at(init_k) is None or board.piece_at(init_k).piece_type != chess.KING)
+
+        def get_safe_queen_moves() -> List[chess.Move]:
+            moves = [m for m in board.legal_moves if board.piece_at(m.from_square) and board.piece_at(m.from_square).piece_type == chess.QUEEN]
+            return [m for m in moves if self._es_movimiento_seguro_subnivel(board, m)]
+
+        def get_safe_king_moves() -> List[chess.Move]:
+            moves = [m for m in board.legal_moves if board.piece_at(m.from_square) and board.piece_at(m.from_square).piece_type == chess.KING]
+            return [m for m in moves if self._es_movimiento_seguro_subnivel(board, m)]
+
+        def get_safe_queen_opener_moves() -> List[chess.Move]:
+            target_files = [chess.D2, chess.E2, chess.C2] if color == chess.WHITE else [chess.D7, chess.E7, chess.C7]
+            moves = [m for m in board.legal_moves if m.from_square in target_files]
+            return [m for m in moves if self._es_movimiento_seguro_subnivel(board, m)]
+
+        def get_safe_king_opener_moves() -> List[chess.Move]:
+            target_files = [chess.E2, chess.D2, chess.F2] if color == chess.WHITE else [chess.E7, chess.D7, chess.F7]
+            moves = [m for m in board.legal_moves if m.from_square in target_files]
+            return [m for m in moves if self._es_movimiento_seguro_subnivel(board, m)]
+
+        if mode == "queen_first":
+            # 1. Si la Dama no ha salido, sacarla
+            if not queen_has_moved:
+                safe_q = get_safe_queen_moves()
+                if safe_q:
+                    forward_q = [m for m in safe_q if chess.square_rank(m.to_square) != chess.square_rank(init_q)]
+                    return random.choice(forward_q if forward_q else safe_q)
+                safe_q_open = get_safe_queen_opener_moves()
+                if safe_q_open:
+                    return random.choice(safe_q_open)
+
+            # 2. Si la Dama ya salió, priorizar sacar el Rey
+            if not king_has_moved:
+                safe_k = get_safe_king_moves()
+                if safe_k:
+                    forward_k = [m for m in safe_k if chess.square_rank(m.to_square) != chess.square_rank(init_k)]
+                    return random.choice(forward_k if forward_k else safe_k)
+                safe_k_open = get_safe_king_opener_moves()
+                if safe_k_open:
+                    return random.choice(safe_k_open)
+
+            # 3. Si ambos salieron, seguir moviendo Dama o Rey activamente
+            safe_q = get_safe_queen_moves()
+            if safe_q:
+                return random.choice(safe_q)
+            safe_k = get_safe_king_moves()
+            if safe_k:
+                return random.choice(safe_k)
+
+        else: # king_first
+            # 1. Priorizar sacar el Rey cuanto antes
+            if not king_has_moved:
+                safe_k = get_safe_king_moves()
+                if safe_k:
+                    forward_k = [m for m in safe_k if chess.square_rank(m.to_square) != chess.square_rank(init_k)]
+                    return random.choice(forward_k if forward_k else safe_k)
+                safe_k_open = get_safe_king_opener_moves()
+                if safe_k_open:
+                    return random.choice(safe_k_open)
+
+            # 2. Si el Rey ya salió, priorizar sacar la Dama
+            if not queen_has_moved:
+                safe_q = get_safe_queen_moves()
+                if safe_q:
+                    forward_q = [m for m in safe_q if chess.square_rank(m.to_square) != chess.square_rank(init_q)]
+                    return random.choice(forward_q if forward_q else safe_q)
+                safe_q_open = get_safe_queen_opener_moves()
+                if safe_q_open:
+                    return random.choice(safe_q_open)
+
+            # 3. Si ambos salieron, seguir moviendo Rey o Dama activamente
+            safe_k = get_safe_king_moves()
+            if safe_k:
+                return random.choice(safe_k)
+            safe_q = get_safe_queen_moves()
+            if safe_q:
+                return random.choice(safe_q)
+
+        return None
+
     def seleccionar_movimiento(self, board: chess.Board, depth: Optional[int] = None, strategy: str = "tactico", tree_mode: str = "cut", time_limit: Optional[float] = None, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Interfaz compatible con app.py para seleccionar la jugada, AHORA ACELERADA POR C++.
@@ -423,6 +586,26 @@ class Minimax2Engine:
         movimientos_legales = list(board.legal_moves)
         if not movimientos_legales:
             return {"success": False, "message": "No hay movimientos legales."}
+
+        # Manejo exclusivo para el Subnivel -1 (Función aleatoria de Dama o Rey temprana sin colgadas)
+        if config and (config.get("is_sublevel_minus_one") or str(config.get("elo_profile")) == "-1"):
+            minus_one_move = self.seleccionar_movimiento_subnivel_menos_uno(board, config)
+            if minus_one_move is not None:
+                best_move = minus_one_move
+                score = float(self.evaluar_posicion(board, config))
+                p_moved = board.piece_at(best_move.from_square)
+                pt_name = chess.piece_name(p_moved.piece_type) if p_moved else "pieza"
+                return {
+                    "success": True,
+                    "move_uci": best_move.uci(),
+                    "move_san": board.san(best_move),
+                    "type": "subnivel_menos_uno",
+                    "category": "Iniciacion Caotica",
+                    "score": score,
+                    "depth_evaluated": 1,
+                    "strategy": strategy,
+                    "explanation": f"Subnivel -1: Salida activa de {pt_name} sin colgadas."
+                }
 
         start_time = time.time()
         

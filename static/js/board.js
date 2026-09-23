@@ -434,6 +434,12 @@ class ChessBoardUI {
                 cfg[cb.dataset.engineFlag] = cb.checked;
             }
         });
+        if (this.eloLevelSelect) {
+            cfg['elo_profile'] = this.eloLevelSelect.value;
+            if (this.eloLevelSelect.value === '-1') {
+                cfg['is_sublevel_minus_one'] = true;
+            }
+        }
         return cfg;
     }
 
@@ -582,6 +588,9 @@ class ChessBoardUI {
 
         // Detectar debilidades explotables en el perfil actual con distinción T+1 vs T+2
         const weaknesses = [];
+        if (currentElo === '-1' || cfg.is_sublevel_minus_one) {
+            weaknesses.push("👑 <strong>Salida caótica de Dama o Rey</strong>: En la apertura sacará inmediatamente su Dama o su Rey a casillas tempranas. Aunque no se dejará piezas gratis en 1 ni mate en 1, puedes acosarlo y desarrollar tus piezas ganando tiempos.");
+        }
         if (!cfg.use_forks) {
             weaknesses.push("⚔️ <strong>Tenedores directos (T+1)</strong>: El motor no vigila bifurcaciones de caballo ni de peón. Busca ataques dobles de 1 jugada contra su Rey y piezas mayores.");
         } else if (!cfg.use_tactica_avanzada) {
@@ -641,6 +650,8 @@ class ChessBoardUI {
 
         const currentTitle = prof.elo_range ? prof.elo_range : `Elo ${currentElo}`;
         const nextTitle = nextProf.elo_range ? nextProf.elo_range : (nextKey === 'MAX' ? 'MAX (2600+)' : `Elo ${nextKey}`);
+        const currentMovesText = recDepth % 2 === 0 ? `${recDepth / 2} jugadas completas` : `${recDepth} ply (${recDepth / 2} jugada)`;
+        const targetMovesText = targetDepthToWin % 2 === 0 ? `${targetDepthToWin / 2} jugadas completas` : `${targetDepthToWin} plies (${targetDepthToWin / 2} jugadas)`;
 
         let html = `
             <div class="elo-coaching-header">
@@ -648,7 +659,7 @@ class ChessBoardUI {
                 <span class="elo-coaching-badge">Meta: ${nextTitle}</span>
             </div>
             <div class="elo-coaching-row">
-                🧠 <strong>Cálculo para Ganarle:</strong> Este nivel piensa a <strong>Profundidad ${recDepth} (${currentMoves} ${currentMoves === 1 ? 'jugada completa' : 'jugadas completas'})</strong> + <strong>${recQDepth} plies de capturas</strong>. Para superarlo, calcula a <strong>Profundidad ${targetDepthToWin} (${targetMoves} jugadas completas)</strong> y adelántate a sus respuestas.
+                🧠 <strong>Cálculo para Ganarle:</strong> Este nivel piensa a <strong>Profundidad ${recDepth} (${currentMovesText})</strong> + <strong>${recQDepth} plies de capturas</strong>. Para superarlo, calcula a <strong>Profundidad ${targetDepthToWin} (${targetMovesText})</strong> y adelántate a sus respuestas.
             </div>
         `;
 
